@@ -1,23 +1,17 @@
-import logo from './logo.svg';
-import './App.css';
+import ExpenseForm from "./components/ExpenseForm";
+import ExpenseList from "./components/ExpenseList";
+import { useState } from "react";
 
 function App() {
+  const [expenses, setExpenses] = useState([]);
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
+    <div className="min-h-screen bg-gray-100 p-4">
+      <div className="max-w-2xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold text-center mb-4">Quản Lý Chi Tiêu</h1>
+        <ExpenseForm setExpenses={setExpenses} />
+        <ExpenseList expenses={expenses} setExpenses={setExpenses} />
+      </div>
     </div>
   );
 }
