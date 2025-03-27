@@ -5,7 +5,8 @@ import { db } from "../firebase";
 const ExpenseForm = () => {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Ăn uống");
-  const [enteredBy, setEnteredBy] = useState("Tài");
+  const [enteredBy, setEnteredBy] = useState("Thạch");
+
 
   // 👉 Hàm định dạng số tiền nhập vào (tự thêm dấu ",")
   const formatCurrencyInput = (value) => {
