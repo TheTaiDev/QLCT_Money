@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc } from "firebase/firestore";
 import { db } from "../firebase"; // Đảm bảo đường dẫn đúng đến tệp firebase.js
 import { Doughnut } from "react-chartjs-2";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
@@ -123,7 +123,7 @@ const ExpenseList = () => {
     if (editingExpense) {
       const { id, amount: oldAmount, ...updatedData } = editingExpense;
       await setDoc(doc(db, "expenses", id), updatedData);
-      const message = `✏️ Chi tiêu đã chỉnh sửa%0A👤 Người sửa: ${updatedData.enteredBy}%0A💵 Số tiền cũ: ${oldAmount.toLocaleString("vi-VN")} đ%0A💵 Số tiền mới: ${updatedData.amount.toLocaleString("vi-VN")} đ%0A📌 Danh mục: ${updatedData.category}%0A📅 Ngày: ${new Date().toLocaleString("vi-VN")}`;
+      const message = `✏️ Chi tiêu đã chỉnh sửa%0A👤 Người nhập: ${updatedData.enteredBy}%0A💵 Số tiền cũ: ${oldAmount.toLocaleString("vi-VN")} đ%0A💵 Số tiền mới: ${updatedData.amount.toLocaleString("vi-VN")} đ%0A📌 Danh mục: ${updatedData.category}%0A📅 Ngày: ${new Date().toLocaleString("vi-VN")}`;
       await sendTelegramNotification(message);
       setEditingExpense(null);
     }
@@ -137,9 +137,29 @@ const ExpenseList = () => {
     if (window.confirm("Bạn có chắc chắn muốn xóa chi tiêu này?")) {
       const expenseToDelete = expenses.find(expense => expense.id === id);
       await deleteDoc(doc(db, "expenses", id));
-      const message = `🗑️ Chi tiêu đã xóa%0A👤 Người xóa: ${expenseToDelete.enteredBy}%0A💵 Số tiền: ${expenseToDelete.amount.toLocaleString("vi-VN")} đ (đã xóa)%0A📌 Danh mục: ${expenseToDelete.category}%0A📅 Ngày: ${formatDate(expenseToDelete.date)}`;
+      const message = `🗑️ Chi tiêu đã xóa%0A👤 Người nhập: ${expenseToDelete.enteredBy}%0A💵 Số tiền: ${expenseToDelete.amount.toLocaleString("vi-VN")} đ (đã xóa)%0A📌 Danh mục: ${expenseToDelete.category}%0A📅 Ngày: ${formatDate(expenseToDelete.date)}`;
       await sendTelegramNotification(message);
     }
+  };
+
+  const sendMonthlyStats = async () => {
+    const monthlyTotals = {};
+    
+    expenses.forEach(expense => {
+      const date = expense.date.toDate();
+      const monthYear = `${date.getMonth() + 1}-${date.getFullYear()}`;
+      if (!monthlyTotals[monthYear]) {
+        monthlyTotals[monthYear] = 0;
+      }
+      monthlyTotals[monthYear] += expense.amount;
+    });
+
+    let message = "📊 Thống kê chi tiêu tháng:\n";
+    for (const [monthYear, total] of Object.entries(monthlyTotals)) {
+      message += `🗓️ ${monthYear}: ${formatCurrency(total)} đ\n`;
+    }
+
+    await sendTelegramNotification(message);
   };
 
   return (
@@ -196,6 +216,12 @@ const ExpenseList = () => {
             >
               📂 Xuất Excel
             </button>
+            <button 
+              onClick={sendMonthlyStats} 
+              className="w-full bg-purple-500 text-white px-4 py-2 rounded-md"
+            >
+              📈 Gửi Thống kê tháng
+            </button>
           </div>
         )}
       </div>
@@ -237,6 +263,9 @@ const ExpenseList = () => {
         </button>
         <button onClick={() => exportToExcel(filteredExpenses)} className="bg-yellow-500 text-white px-4 py-2 rounded-md">
           📂 Xuất Excel
+        </button>
+        <button onClick={sendMonthlyStats} className="bg-purple-500 text-white px-4 py-2 rounded-md">
+          📈 Gửi Thống kê tháng
         </button>
       </div>
 
