@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, query, orderBy } from "firebase/firestore";
-import { db } from "../firebase";
+import { collection, onSnapshot, query, orderBy, doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase"; // Đảm bảo đường dẫn đúng đến tệp firebase.js
 import { Doughnut } from "react-chartjs-2";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import * as XLSX from "xlsx";
@@ -8,19 +8,20 @@ import * as XLSX from "xlsx";
 // Đăng ký Chart.js
 ChartJS.register(ArcElement, Tooltip, Legend);
 
+const TELEGRAM_BOT_TOKEN = "7577251581:AAG5svPnqikSK_RI_7L4y96spEL7RUvBpgY";
+const TELEGRAM_CHAT_ID = "-1002646067684";
+
 const ExpenseList = () => {
   const [expenses, setExpenses] = useState([]);
   const [categoryTotals, setCategoryTotals] = useState({});
   const [total, setTotal] = useState(0);
   const [splitAmount, setSplitAmount] = useState(0);
   const [userTotals, setUserTotals] = useState({ Tài: 0, Thạch: 0 });
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1); // Mặc định chọn tháng hiện tại
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false); // Điều khiển mở menu trên mobile
-  
-  // State cho từng nút
-  const [showTotalSplit, setShowTotalSplit] = useState(false); // Hiển thị/ẩn Tổng & Chia Đôi
-  const [showCategoryStats, setShowCategoryStats] = useState(false); // Hiển thị/ẩn Thống kê theo Danh mục
-  const [showExportExcel, setShowExportExcel] = useState(false); // Hiển thị/ẩn Xuất Excel
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [showTotalSplit, setShowTotalSplit] = useState(false);
+  const [showCategoryStats, setShowCategoryStats] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
 
   useEffect(() => {
     const q = query(collection(db, "expenses"), orderBy("date", "desc"));
@@ -31,18 +32,13 @@ const ExpenseList = () => {
       }));
       setExpenses(data);
     });
-    
 
     return () => unsubscribe();
   }, []);
 
-  // 👉 Định dạng số tiền
   const formatCurrency = (amount) => amount.toLocaleString("vi-VN");
-
-  // 👉 Định dạng ngày & giờ
-  // 👉 Định dạng ngày & giờ
   const formatDate = (timestamp) => {
-    if (!timestamp || !timestamp.toDate) return ""; // Kiểm tra nếu timestamp là null hoặc không có phương thức toDate
+    if (!timestamp || !timestamp.toDate) return "";
     const date = timestamp.toDate();
     return date.toLocaleString("vi-VN", {
       year: "numeric",
@@ -53,13 +49,11 @@ const ExpenseList = () => {
     });
   };
 
-  // 👉 Tính tổng chi tiêu & chia đôi
   const calculateTotalAndSplit = (filteredExpenses) => {
     const totalAmount = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
     setTotal(totalAmount);
     setSplitAmount(totalAmount / 2);
 
-    // Tính tổng tiền mỗi người đóng
     const userExpenseTotals = { Tài: 0, Thạch: 0 };
     filteredExpenses.forEach((expense) => {
       if (userExpenseTotals[expense.enteredBy] !== undefined) {
@@ -70,10 +64,8 @@ const ExpenseList = () => {
     setUserTotals(userExpenseTotals);
   };
 
-  // 👉 Tính tổng tiền theo danh mục chi tiêu
   const calculateCategoryTotals = (filteredExpenses) => {
     const totals = {};
-
     filteredExpenses.forEach((expense) => {
       if (!totals[expense.category]) {
         totals[expense.category] = 0;
@@ -84,25 +76,12 @@ const ExpenseList = () => {
     setCategoryTotals(totals);
   };
 
-  // 👉 Dữ liệu cho biểu đồ tròn
-  const chartData = {
-    labels: Object.keys(categoryTotals),
-    datasets: [
-      {
-        data: Object.values(categoryTotals),
-        backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4CAF50", "#BA68C8", "#FFA726"],
-        hoverBackgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4CAF50", "#BA68C8", "#FFA726"],
-      },
-    ],
-  };
-
-  // 👉 Xuất danh sách chi tiêu ra Excel
   const exportToExcel = (filteredExpenses) => {
     const ws = XLSX.utils.json_to_sheet(
       filteredExpenses.map((expense) => ({
         "Người nhập": expense.enteredBy,
         "Số tiền": formatCurrency(expense.amount),
-        "Danh mục": expense.category, // Đổi description → category
+        "Danh mục": expense.category,
         "Ngày nhập": formatDate(expense.date),
       }))
     );
@@ -112,27 +91,61 @@ const ExpenseList = () => {
     XLSX.writeFile(wb, "Danh_sach_chi_tieu.xlsx");
   };
 
-  // 👉 Lọc chi tiêu theo tháng
   const filteredExpenses = selectedMonth === "all" ? expenses : expenses.filter((expense) => {
-    // Kiểm tra nếu expense.date hợp lệ
     if (!expense.date || !expense.date.toDate) {
-      console.warn("Dữ liệu không hợp lệ cho chi tiêu ID: ", expense.id);
-      return false; // Loại bỏ chi tiêu này
+      return false;
     }
-    const expenseMonth = expense.date.toDate().getMonth() + 1; // Tháng trong JavaScript là từ 0 đến 11
+    const expenseMonth = expense.date.toDate().getMonth() + 1;
     return expenseMonth === parseInt(selectedMonth);
   });
 
-  // Gọi hàm tính toán khi filteredExpenses thay đổi
   useEffect(() => {
     calculateTotalAndSplit(filteredExpenses);
     calculateCategoryTotals(filteredExpenses);
   }, [filteredExpenses]);
 
+  const sendTelegramNotification = async (message) => {
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=${message}`;
+  
+    try {
+      const response = await fetch(url);
+      const result = await response.json();
+      
+      if (!result.ok) {
+        console.error("❌ Lỗi từ Telegram:", result);
+      }
+    } catch (error) {
+      console.error("❌ Lỗi gửi thông báo Telegram:", error);
+    }
+  };
+
+  const saveEditedExpense = async () => {
+    if (editingExpense) {
+      const { id, amount: oldAmount, ...updatedData } = editingExpense;
+      await setDoc(doc(db, "expenses", id), updatedData);
+      const message = `✏️ Chi tiêu đã chỉnh sửa%0A👤 Người sửa: ${updatedData.enteredBy}%0A💵 Số tiền cũ: ${oldAmount.toLocaleString("vi-VN")} đ%0A💵 Số tiền mới: ${updatedData.amount.toLocaleString("vi-VN")} đ%0A📌 Danh mục: ${updatedData.category}%0A📅 Ngày: ${new Date().toLocaleString("vi-VN")}`;
+      await sendTelegramNotification(message);
+      setEditingExpense(null);
+    }
+  };
+
+  const handleEditExpense = (expense) => {
+    setEditingExpense(expense);
+  };
+
+  const deleteExpense = async (id) => {
+    if (window.confirm("Bạn có chắc chắn muốn xóa chi tiêu này?")) {
+      const expenseToDelete = expenses.find(expense => expense.id === id);
+      await deleteDoc(doc(db, "expenses", id));
+      const message = `🗑️ Chi tiêu đã xóa%0A👤 Người xóa: ${expenseToDelete.enteredBy}%0A💵 Số tiền: ${expenseToDelete.amount.toLocaleString("vi-VN")} đ (đã xóa)%0A📌 Danh mục: ${expenseToDelete.category}%0A📅 Ngày: ${formatDate(expenseToDelete.date)}`;
+      await sendTelegramNotification(message);
+    }
+  };
+
   return (
     <div className="overflow-x-auto p-4">
       {/* Nút lọc theo tháng */}
-      <div className="flex mb-4 space-x-4">
+      <div className="flex mb-4 space-x-4 flex-wrap">
         <select
           value={selectedMonth}
           onChange={(e) => setSelectedMonth(e.target.value)}
@@ -178,7 +191,7 @@ const ExpenseList = () => {
               📊 Thống kê theo Danh mục
             </button>
             <button 
-              onClick={() => setShowExportExcel(!showExportExcel)} 
+              onClick={() => exportToExcel(filteredExpenses)} 
               className="w-full bg-yellow-500 text-white px-4 py-2 rounded-md"
             >
               📂 Xuất Excel
@@ -186,6 +199,33 @@ const ExpenseList = () => {
           </div>
         )}
       </div>
+
+      {/* Giao diện sửa chi tiêu */}
+      {editingExpense && (
+        <div className="bg-gray-100 p-4 rounded-md mb-4">
+          <h3 className="font-semibold">Sửa chi tiêu</h3>
+          <input
+            type="number"
+            value={editingExpense.amount}
+            onChange={(e) => setEditingExpense({ ...editingExpense, amount: parseFloat(e.target.value) })}
+            placeholder="Số tiền"
+            className="border rounded-md px-2 py-1 mb-2"
+          />
+          <input
+            type="text"
+            value={editingExpense.category}
+            onChange={(e) => setEditingExpense({ ...editingExpense, category: e.target.value })}
+            placeholder="Danh mục"
+            className="border rounded-md px-2 py-1 mb-2"
+          />
+          <button onClick={saveEditedExpense} className="bg-blue-500 text-white px-4 py-2 rounded-md">
+            Lưu
+          </button>
+          <button onClick={() => setEditingExpense(null)} className="bg-red-500 text-white px-4 py-2 rounded-md ml-2">
+            Hủy
+          </button>
+        </div>
+      )}
 
       {/* Hiển thị nút và nội dung theo yêu cầu */}
       <div className="lg:flex lg:space-x-4 mb-4 hidden">
@@ -195,7 +235,7 @@ const ExpenseList = () => {
         <button onClick={() => setShowCategoryStats(!showCategoryStats)} className="bg-blue-500 text-white px-4 py-2 rounded-md">
           📊 Thống kê theo Danh mục
         </button>
-        <button onClick={() => exportToExcel(filteredExpenses)}  className="bg-yellow-500 text-white px-4 py-2 rounded-md">
+        <button onClick={() => exportToExcel(filteredExpenses)} className="bg-yellow-500 text-white px-4 py-2 rounded-md">
           📂 Xuất Excel
         </button>
       </div>
@@ -208,7 +248,6 @@ const ExpenseList = () => {
           <p className="text-lg text-green-600">👤 Tài đã đóng: {formatCurrency(userTotals["Tài"])} đ</p>
           <p className="text-lg text-blue-600">👤 Thạch đã đóng: {formatCurrency(userTotals["Thạch"])} đ</p>
 
-          {/* Tính số tiền cần chuyển để cân bằng */}
           {userTotals["Tài"] !== userTotals["Thạch"] && (
             <p className="text-red-600 font-bold">
               {userTotals["Tài"] > userTotals["Thạch"]
@@ -220,16 +259,17 @@ const ExpenseList = () => {
       )}
 
       {showCategoryStats && (
-        <div className="w-1/2 mx-auto mb-6">
-          <Doughnut data={chartData} />
+        <div className="w-full md:w-1/2 mx-auto mb-6">
+          <Doughnut data={{
+            labels: Object.keys(categoryTotals),
+            datasets: [{
+              data: Object.values(categoryTotals),
+              backgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4CAF50", "#BA68C8", "#FFA726"],
+              hoverBackgroundColor: ["#FF6384", "#36A2EB", "#FFCE56", "#4CAF50", "#BA68C8", "#FFA726"],
+            }],
+          }} />
         </div>
       )}
-
-     
-        <div className="mb-4">
-         
-        </div>
-      
 
       {/* Bảng hiển thị danh sách chi tiêu */}
       <table className="w-full text-sm text-left border-collapse border border-gray-300">
@@ -239,6 +279,7 @@ const ExpenseList = () => {
             <th className="border border-gray-300 px-4 py-2">💵 Số tiền</th>
             <th className="border border-gray-300 px-4 py-2">📌 Danh mục</th>
             <th className="border border-gray-300 px-4 py-2">📅 Ngày nhập</th>
+            <th className="border border-gray-300 px-4 py-2">⚙️ Hành động</th>
           </tr>
         </thead>
         <tbody>
@@ -250,6 +291,14 @@ const ExpenseList = () => {
               </td>
               <td className="border border-gray-300 px-4 py-2">{expense.category}</td>
               <td className="border border-gray-300 px-4 py-2 text-gray-600">{formatDate(expense.date)}</td>
+              <td className="border border-gray-300 px-4 py-2">
+                <button onClick={() => handleEditExpense(expense)} className="bg-yellow-500 text-white px-2 py-1 rounded-md">
+                  Sửa
+                </button>
+                <button onClick={() => deleteExpense(expense.id)} className="bg-red-500 text-white px-2 py-1 rounded-md ml-2">
+                  Xóa
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
