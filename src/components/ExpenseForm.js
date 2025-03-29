@@ -71,7 +71,7 @@ const ExpenseForm = () => {
       <div className="mb-2">
         <label className="block text-gray-700">💵 Số tiền</label>
         <input
-          type="text"
+          type="number"
           value={amount}
           onChange={(e) => setAmount(formatCurrencyInput(e.target.value))}
           className="w-full p-2 border rounded"
