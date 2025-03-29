@@ -36,7 +36,13 @@ const ExpenseList = () => {
     return () => unsubscribe();
   }, []);
 
-  const formatCurrency = (amount) => amount.toLocaleString("vi-VN");
+  const formatCurrency = (amount) => {
+    if (amount === undefined || amount === null) {
+      return "0"; // Hoặc một giá trị mặc định khác
+    }
+    return amount.toLocaleString("vi-VN");
+  };
+
   const formatDate = (timestamp) => {
     if (!timestamp || !timestamp.toDate) return "";
     const date = timestamp.toDate();
@@ -50,14 +56,14 @@ const ExpenseList = () => {
   };
 
   const calculateTotalAndSplit = (filteredExpenses) => {
-    const totalAmount = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+    const totalAmount = filteredExpenses.reduce((sum, expense) => sum + (expense.amount || 0), 0);
     setTotal(totalAmount);
     setSplitAmount(totalAmount / 2);
 
     const userExpenseTotals = { Tài: 0, Thạch: 0 };
     filteredExpenses.forEach((expense) => {
       if (userExpenseTotals[expense.enteredBy] !== undefined) {
-        userExpenseTotals[expense.enteredBy] += expense.amount;
+        userExpenseTotals[expense.enteredBy] += (expense.amount || 0);
       }
     });
 
@@ -70,7 +76,7 @@ const ExpenseList = () => {
       if (!totals[expense.category]) {
         totals[expense.category] = 0;
       }
-      totals[expense.category] += expense.amount;
+      totals[expense.category] += (expense.amount || 0);
     });
 
     setCategoryTotals(totals);
@@ -123,7 +129,7 @@ const ExpenseList = () => {
     if (editingExpense) {
       const { id, amount: oldAmount, ...updatedData } = editingExpense;
       await setDoc(doc(db, "expenses", id), updatedData);
-      const message = `✏️ Chi tiêu đã chỉnh sửa%0A👤 Người nhập: ${updatedData.enteredBy}%0A💵 Số tiền cũ: ${oldAmount.toLocaleString("vi-VN")} đ%0A💵 Số tiền mới: ${updatedData.amount.toLocaleString("vi-VN")} đ%0A📌 Danh mục: ${updatedData.category}%0A📅 Ngày: ${new Date().toLocaleString("vi-VN")}`;
+      const message = `✏️ Chi tiêu đã chỉnh sửa%0A👤 Người nhập: ${updatedData.enteredBy}%0A💵 Số tiền cũ: ${formatCurrency(oldAmount)} đ%0A💵 Số tiền mới: ${formatCurrency(updatedData.amount)} đ%0A📌 Danh mục: ${updatedData.category}%0A📅 Ngày: ${new Date().toLocaleString("vi-VN")}`;
       await sendTelegramNotification(message);
       setEditingExpense(null);
     }
@@ -137,7 +143,7 @@ const ExpenseList = () => {
     if (window.confirm("Bạn có chắc chắn muốn xóa chi tiêu này?")) {
       const expenseToDelete = expenses.find(expense => expense.id === id);
       await deleteDoc(doc(db, "expenses", id));
-      const message = `🗑️ Chi tiêu đã xóa%0A👤 Người nhập: ${expenseToDelete.enteredBy}%0A💵 Số tiền: ${expenseToDelete.amount.toLocaleString("vi-VN")} đ (đã xóa)%0A📌 Danh mục: ${expenseToDelete.category}%0A📅 Ngày: ${formatDate(expenseToDelete.date)}`;
+      const message = `🗑️ Chi tiêu đã xóa%0A👤 Người nhập: ${expenseToDelete.enteredBy}%0A💵 Số tiền: ${formatCurrency(expenseToDelete.amount)} đ (đã xóa)%0A📌 Danh mục: ${expenseToDelete.category}%0A📅 Ngày: ${formatDate(expenseToDelete.date)}`;
       await sendTelegramNotification(message);
     }
   };
@@ -151,7 +157,10 @@ const ExpenseList = () => {
       if (!monthlyTotals[monthYear]) {
         monthlyTotals[monthYear] = 0;
       }
-      monthlyTotals[monthYear] += expense.amount;
+      // Kiểm tra amount trước khi cộng
+      if (expense.amount) {
+        monthlyTotals[monthYear] += expense.amount;
+      }
     });
 
     let message = "📊 Thống kê chi tiêu tháng:\n";
