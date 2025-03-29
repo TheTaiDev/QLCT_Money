@@ -2,11 +2,13 @@ import { useState } from "react";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase";
 
+const TELEGRAM_BOT_TOKEN = "7577251581:AAG5svPnqikSK_RI_7L4y96spEL7RUvBpgY";
+const TELEGRAM_CHAT_ID = "-1002646067684";
+
 const ExpenseForm = () => {
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("Ăn uống");
   const [enteredBy, setEnteredBy] = useState("Thạch");
-
 
   // 👉 Hàm định dạng số tiền nhập vào (tự thêm dấu ",")
   const formatCurrencyInput = (value) => {
@@ -14,18 +16,38 @@ const ExpenseForm = () => {
     return numericValue.replace(/\B(?=(\d{3})+(?!\d))/g, ","); // Thêm dấu ","
   };
 
+  const sendTelegramNotification = async (expense) => {
+    const message = `💰 Chi tiêu mới%0A👤 Người nhập: ${expense.enteredBy}%0A💵 Số tiền: ${expense.amount.toLocaleString("vi-VN")} đ%0A📌 Danh mục: ${expense.category}%0A📅 Ngày: ${new Date().toLocaleString("vi-VN")}`;
+  
+    const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage?chat_id=${TELEGRAM_CHAT_ID}&text=${message}`;
+  
+    try {
+      const response = await fetch(url);
+      const result = await response.json();
+      
+      if (!result.ok) {
+        console.error("❌ Lỗi từ Telegram:", result);
+      }
+    } catch (error) {
+      console.error("❌ Lỗi gửi thông báo Telegram:", error);
+    }
+  };
+  
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!amount || !category) return;
 
-    try {
-      await addDoc(collection(db, "expenses"), {
-        amount: parseInt(amount.replace(/,/g, ""), 10),
-        category,
-        enteredBy,
-        date: serverTimestamp(),
-      });
+    const newExpense = {
+      amount: parseInt(amount.replace(/,/g, ""), 10),
+      category,
+      enteredBy,
+      date: serverTimestamp(),
+    };
 
+    try {
+      await addDoc(collection(db, "expenses"), newExpense);
+      sendTelegramNotification(newExpense);
       setAmount("");
       setCategory("Ăn uống");
     } catch (error) {
@@ -53,7 +75,7 @@ const ExpenseForm = () => {
           value={amount}
           onChange={(e) => setAmount(formatCurrencyInput(e.target.value))}
           className="w-full p-2 border rounded"
-          placeholder="Nhập số tiền"
+          placeholder="Nhập số tiền" 
         />
       </div>
       <div className="mb-2">
